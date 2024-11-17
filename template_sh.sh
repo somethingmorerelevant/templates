@@ -9,6 +9,8 @@ LOCAL_PATH=""             # Default local file or directory path
 REMOTE_PATH=""            # Default remote file path or directory
 FILENAME_PATTERN="*"      # Default filename pattern (matches all files)
 
+# LOGFILE PATH WITH DATE TIME
+LOGFILE="sftp_transfer_$(date +'%Y-%m-%d_%H-%M-%S').log"
 # Function to display help message
 usage() {
     echo "Usage: $0 -h <host> -u <user> -p <port> -i <identity_file> -f <local_file_or_directory> -r <remote_file_path_or_directory> [-t <filename_pattern>]"
@@ -52,38 +54,36 @@ parse_arguments() {
     fi
 }
 
-# Function to get files to transfer
-get_files_to_transfer() {
-    local path=$1
-    local pattern=$2
-
-    if [[ -d $path ]]; then
-        echo "Retrieving files from directory '$path' matching pattern '$pattern'..."
-        find "$path" -type f -name "$pattern"
-    elif [[ -f $path ]]; then
-        echo "$path"
-    else
-        echo "Error: '$path' is neither a file nor a valid directory."
-        exit 1
-    fi
-}
-
 transfer_files() {
-    echo "Starting file transfer..."
-    sftp -i "$IDENTITY_FILE" -oPort="$PORT" "$USER@$HOST" <<EOF
+    sftp -i "$IDENTITY_FILE" -oPort="$PORT" "$USER@$HOST" <<EOF | tee -a "$LOGFILE"
 lcd "$LOCAL_PATH"
+echo "Files to copy"
+!ls $FILENAME_PATTERN
 cd "$REMOTE_PATH"
+echo "Current Files (Before transfer)"
+ls -la $REMOTE_PATH
 $(if [[ -d $LOCAL_PATH ]]; then echo "mput $FILENAME_PATTERN"; else echo "put $LOCAL_PATH"; fi)
+echo "Current Files (After Transfer)"
+ls -la $REMOTE_PATH
 EOF
-    echo "SFTP transfer completed."
 }
+
 # Main script
 main() {
     parse_arguments "$@"
-    check_path_exists "$LOCAL_PATH"
+    echo "Arguments Validated" | tee -a "$LOGFILE"
 
+    check_path_exists "$LOCAL_PATH"
+    echo "Checked Local Path"| tee -a "$LOGFILE"
+    echo "Starting file transfer..." | tee -a "$LOGFILE"
     # Transfer the files
-    transfer_files "${files_to_transfer[@]}"
+    transfer_files "$@"
+    if [[ $? -eq 0 ]]; then
+        echo "SFTP transfer completed successfully. Logs saved to $LOGFILE." | tee -a "$LOGFILE"
+    else
+        echo "SFTP transfer failed. Check $LOGFILE for details." | tee -a "$LOGFILE"
+    fi
+
 }
 
 # Entry point
